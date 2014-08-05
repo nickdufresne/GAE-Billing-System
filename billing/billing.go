@@ -121,43 +121,19 @@ type BlobInfo struct {
 	Size         int64
 }
 
-const (
-	blobInfoKind        = "__BlobInfo__"
-	blobFileIndexKind   = "__BlobFileIndex__"
-	blobKeyPropertyName = "blob_key"
-	zeroKey             = appengine.BlobKey("")
-)
-
-func Stat(c appengine.Context, blobKey appengine.BlobKey) (*BlobInfo, error) {
-	dskey := datastore.NewKey(c, blobInfoKind, string(blobKey), 0, nil)
-	m := make(datastore.Map)
-	if err := datastore.Get(c, dskey, m); err != nil {
-		return nil, err
-	}
-	contentType, ok0 := m["content_type"].(string)
-	filename, ok1 := m["filename"].(string)
-	size, ok2 := m["size"].(int64)
-	creation, ok3 := m["creation"].(datastore.Time)
-	if !ok0 || !ok1 || !ok2 || !ok3 {
-		return nil, errors.New("blobstore: invalid blob info")
-	}
-	bi := &BlobInfo{
-		BlobKey:      blobKey,
-		ContentType:  contentType,
-		Filename:     filename,
-		Size:         size,
-		CreationTime: creation.Time(),
-	}
-	return bi, nil
-}
-
 func handleDownload(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 
 	blobKey := appengine.BlobKey(r.FormValue("id"))
-	stat, err := Stat(ctx.c, blobKey)
+	stat, err := blobstore.Stat(ctx.c, blobKey)
+
+	if err == datastore.ErrNoSuchEntity {
+		return ctx.NotFound()
+	}
+
 	if err != nil {
 		return err
 	}
+
 	hdr := w.Header()
 	hdr.Set("Content-Disposition", "attachment; filename="+stat.Filename)
 	hdr.Set("X-AppEngine-BlobKey", string(blobKey))
