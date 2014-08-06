@@ -2,8 +2,6 @@ package billing
 
 import (
 	"fmt"
-	"html/template"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -12,54 +10,37 @@ import (
 	"appengine/blobstore"
 	"appengine/datastore"
 	"appengine/user"
+
+	"github.com/gorilla/mux"
 )
-
-type Bill struct {
-	ID         string
-	PostedBy   string
-	PostedOn   time.Time
-	Vendor     string
-	BlobKey    string
-	Amt        int
-	Paid       bool
-	Reconciled bool
-}
-
-type Greeting struct {
-	Author  string
-	Content string
-	Date    time.Time
-}
-
-type GreetingPage struct {
-	User       *user.User
-	SignOutURL string
-	Greetings  []Greeting
-}
 
 func authOnly(next myHandler) myHandler {
 	return func(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 		if ctx.user == nil {
-			url, _ := user.LoginURL(ctx.c, "/")
+			url, err := user.LoginURL(ctx.c, "/login")
+			if err != nil {
+				return err
+			}
 			ctx.SetTitle("Please log in to continue ...")
+			return ctx.Render(signinTmpl, url)
+		}
+
+		err := ctx.LoadUserSession()
+		if err != nil {
+			return err
+		}
+
+		if ctx.userSession == nil {
+			url, err := user.LoginURL(ctx.c, "/login")
+			if err != nil {
+				return err
+			}
+			ctx.SetTitle("Invalid user ...")
 			return ctx.Render(signinTmpl, url)
 		}
 
 		return next(ctx, w, r)
 	}
-}
-
-// guestbookKey returns the key used for all guestbook entries.
-func defaultBillCompanyKey(c appengine.Context) *datastore.Key {
-	// The string "default_guestbook" here could be varied to have multiple guestbooks.
-	return datastore.NewKey(c, "Bill", "default_parent_company", 0, nil)
-}
-
-func serveError(c appengine.Context, w http.ResponseWriter, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
-	w.Header().Set("Content-Type", "text/plain")
-	io.WriteString(w, "Internal Server Error")
-	c.Errorf("%v", err)
 }
 
 func handleRoot(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -68,23 +49,11 @@ func handleRoot(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	q := datastore.NewQuery("Bill").Ancestor(defaultBillCompanyKey(ctx.c)).Order("-PostedOn").Limit(10)
-	bills := make([]Bill, 0, 10)
-	keys, err := q.GetAll(ctx.c, &bills)
-	if err != nil {
-		return err
-	}
-
-	for idx, k := range keys {
-		bills[idx].ID = k.Encode()
-	}
-
 	ctx.SetTitle("Upload New Bill")
 
 	render := struct {
 		UploadURL *url.URL
-		Bills     []Bill
-	}{uploadURL, bills}
+	}{uploadURL}
 	return ctx.Render(uploadTmpl, render)
 }
 
@@ -111,14 +80,6 @@ func handleView(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 
 	ctx.Render(viewTmpl, bill)
 	return nil
-}
-
-type BlobInfo struct {
-	BlobKey      appengine.BlobKey
-	ContentType  string
-	CreationTime *time.Time
-	Filename     string // if provided
-	Size         int64
 }
 
 func handleDownload(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -150,7 +111,7 @@ func handleUpload(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	vendor := getFormFieldString(fields, "vendor")
+	//vendor := getFormFieldString(fields, "vendor")
 	amt := getFormFieldInt(fields, "amount")
 
 	file := blobs["file"]
@@ -162,13 +123,12 @@ func handleUpload(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 
 	b := Bill{
 		Amt:      amt,
-		Vendor:   vendor,
 		PostedOn: time.Now(),
 		PostedBy: ctx.user.String(),
-		BlobKey:  string(file[0].BlobKey),
+		BlobKey:  file[0].BlobKey,
 	}
 
-	key := datastore.NewIncompleteKey(ctx.c, "Bill", defaultBillCompanyKey(ctx.c))
+	key := datastore.NewIncompleteKey(ctx.c, "Bill", nil)
 	billKey, err := datastore.Put(ctx.c, key, &b)
 
 	if err != nil {
@@ -180,13 +140,29 @@ func handleUpload(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-var signinTmpl *template.Template = template.Must(template.ParseFiles("./tmpl/layout.html", "./tmpl/signin.html"))
-var uploadTmpl *template.Template = template.Must(template.ParseFiles("./tmpl/layout.html", "./tmpl/upload.html"))
-var viewTmpl *template.Template = template.Must(template.ParseFiles("./tmpl/layout.html", "./tmpl/view.html"))
+func handleBillsDashboard(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	return ctx.Render(billsDashTmpl, "Hello Bills")
+}
+
+var (
+	signinTmpl    = tmpl("signin.html")
+	uploadTmpl    = tmpl("upload.html")
+	viewTmpl      = tmpl("view.html")
+	billsDashTmpl = tmpl("bills/dashboard.html")
+)
 
 func init() {
-	http.Handle("/", authOnly(handleRoot))
-	http.Handle("/view/", authOnly(handleView))
-	http.Handle("/upload", authOnly(handleUpload))
-	http.Handle("/download/", authOnly(handleDownload))
+	r := mux.NewRouter()
+
+	r.Handle("/", authOnly(handleRoot))
+
+	setupAdminRoutes(r)
+	setupLoginRoutes(r)
+
+	r.Handle("/bills/dashboard", authOnly(handleBillsDashboard))
+	r.Handle("/bills/view", authOnly(handleView))
+	r.Handle("/bills/upload", authOnly(handleUpload))
+	r.Handle("/bills/download/", authOnly(handleDownload))
+
+	http.Handle("/", r)
 }

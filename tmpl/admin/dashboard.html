@@ -1,0 +1,96 @@
+{{define "content"}}
+  <div class="row">
+    <h2> Admin Dashboard </h2>
+    <a href="/admin/user/new" class="btn btn-default"> New User </a>
+    <a href="/admin/company/new" class="btn btn-default"> New Company </a>
+    <a href="/admin/vendor/new" class="btn btn-default"> New Vendor </a>
+  </div>
+  <div class="clear-fix"></div>
+
+  {{with .Companies}}
+    <br/>
+    <div class="row">
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th> Name </th>
+            <th> Created </th>
+            <th> By </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .}}
+            <tr>
+              <td> <a href="/admin/company/view?id={{.ID}}"> {{.Name}} </a></td>
+              <td> {{date .CreatedOn}} </td>
+              <td> {{.CreatedBy}} </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="clear-fix"></div>
+  {{end}}
+  {{with .Users}}
+    <br/>
+    <div class="row">
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th> Email </th>
+            <th> Company </th>
+            <th> Login </th>
+            <th> Created By </th>
+            <th> Delete </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .}}
+            <tr>
+              <td> {{.Email}} </td>
+              {{with .Company}}
+                <td> {{.Name}} </td>
+              {{else}}
+                <td></td>
+              {{end}}
+              <td> {{date .LastLoginOn}} </td>
+              <td> {{.CreatedBy}} </td>
+              <td> <a href="/admin/user/delete?id={{.ID}}" class="btn btn-danger btn-sm"><span class="glyphicon glyphicon-remove-circle"></span> Delete </a> </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="clear-fix"></div>
+  {{end}}
+  {{with .Vendors}}
+    <br/>
+    <div class="row">
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th> Name </th>
+            <th> Company </th>
+            <th> Login </th>
+            <th> Created By </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .}}
+            <tr>
+              <td> {{.Name}} </td>
+              {{with .Company}}
+                <td> {{.Name}} </td>
+              {{else}}
+                <td></td>
+              {{end}}
+              <td> {{date .CreatedOn}} </td>
+              <td> {{.CreatedBy}} </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="clear-fix"></div>
+  {{end}}
+{{end}}

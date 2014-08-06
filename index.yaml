@@ -21,3 +21,23 @@ indexes:
   properties:
   - name: PostedOn
     direction: desc
+
+- kind: Company
+  ancestor: yes
+  properties:
+  - name: Name
+
+- kind: User
+  ancestor: yes
+  properties:
+  - name: Email
+
+- kind: Vendor
+  ancestor: yes
+  properties:
+  - name: Email
+
+- kind: Vendor
+  ancestor: yes
+  properties:
+  - name: Name
