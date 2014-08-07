@@ -49,3 +49,54 @@ func (ctx *Context) GetCompanyVendors(c *Company) ([]*Vendor, error) {
 
 	return vendors, nil
 }
+
+func (ctx *Context) LoadVendorCompanies(vendors []*Vendor) error {
+	var keys []*datastore.Key
+	for _, v := range vendors {
+		keys = append(keys, v.CompanyKey)
+	}
+
+	companies, err := ctx.GetCompanyMulti(keys)
+
+	if err != nil {
+		return err
+	}
+
+	for idx, v := range vendors {
+		v.Company = companies[idx]
+	}
+
+	return nil
+}
+
+func (ctx *Context) GetVendorMulti(keys []*datastore.Key) ([]*Vendor, error) {
+	vendors := make([]*Vendor, len(keys))
+
+	for idx, _ := range vendors {
+		vendors[idx] = new(Vendor)
+	}
+
+	err := datastore.GetMulti(ctx.c, keys, vendors)
+
+	return vendors, err
+}
+
+func (ctx *Context) GetVendorByID(id string) (*Vendor, error) {
+	v := new(Vendor)
+	k, err := datastore.DecodeKey(id)
+
+	v.Key = k
+
+	if err != nil {
+		return v, err
+	}
+
+	err = datastore.Get(ctx.c, k, v)
+
+	return v, err
+}
+
+func (ctx *Context) GetVendorCount() (int, error) {
+	c, err := datastore.NewQuery("Vendor").Count(ctx.c)
+	return c, err
+}

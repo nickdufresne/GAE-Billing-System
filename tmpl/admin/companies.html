@@ -1,0 +1,31 @@
+{{define "content"}}
+  
+  <div class="row">
+    <h1 class="page-header"> Companies </h1>
+    <a href="/admin/company/new" class="btn btn-default"> New Company </a>
+  </div>
+  {{with .}}
+    <br/>
+    <div class="row">
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th> Name </th>
+            <th> Created </th>
+            <th> By </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .}}
+            <tr>
+              <td> <a href="/admin/company/view?id={{.ID}}"> {{.Name}} </a></td>
+              <td> {{date .CreatedOn}} </td>
+              <td> {{.CreatedBy}} </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="clear-fix"></div>
+  {{end}}
+{{end}}

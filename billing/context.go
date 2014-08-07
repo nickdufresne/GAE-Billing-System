@@ -26,6 +26,7 @@ type UserPage struct {
 	Flashes   []interface{}
 	Title     string
 	Content   interface{}
+	Path      string
 }
 
 type UserInfo struct {
@@ -106,6 +107,7 @@ func (c *Context) Render(t *template.Template, content interface{}) error {
 	p := UserPage{
 		Content: content,
 		Flashes: c.Session().Flashes(),
+		Path:    c.r.URL.Path,
 	}
 
 	if c.user != nil {

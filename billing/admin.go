@@ -1,14 +1,30 @@
 package billing
 
 import (
+	"html/template"
 	"net/http"
+	"net/url"
 	"time"
 
+	"appengine/blobstore"
 	"appengine/datastore"
 	"appengine/user"
 
 	"github.com/gorilla/mux"
 )
+
+type DashboardInfo struct {
+	VendorCount  int
+	UserCount    int
+	BillCount    int
+	CompanyCount int
+	Path         string
+}
+
+type DashboardPage struct {
+	Dashboard *DashboardInfo
+	Page      interface{}
+}
 
 func adminOnly(next myHandler) myHandler {
 	return func(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -21,7 +37,7 @@ func adminOnly(next myHandler) myHandler {
 	}
 }
 
-type DashboardPage struct {
+type DashboardHomePage struct {
 	Users     []*User
 	Companies []*Company
 	Vendors   []*Vendor
@@ -63,11 +79,12 @@ func handleAdminDashboard(ctx *Context, w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	return ctx.Render(adminDashTmpl, DashboardPage{users, companies, vendors})
+	return ctx.renderAdmin(adminDashTmpl, DashboardHomePage{users, companies, vendors})
 }
 
 func handleNewCompany(ctx *Context, w http.ResponseWriter, r *http.Request) error {
-	return ctx.Render(newCompanyTmpl, nil)
+	ctx.Debugf("Handle New Company ...")
+	return ctx.renderAdmin(newCompanyTmpl, nil)
 }
 
 func handleCreateCompany(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -139,7 +156,7 @@ func handleCreateUser(ctx *Context, w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return err
 		}
-		ctx.Render(newUserTmpl, NewUserForm{&user, vErrs, companies})
+		ctx.renderAdmin(newUserTmpl, NewUserForm{&user, vErrs, companies})
 		return nil
 	}
 
@@ -159,7 +176,7 @@ func handleNewUser(ctx *Context, w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return ctx.Render(newUserTmpl, NewUserForm{&User{}, []string{}, companies})
+	return ctx.renderAdmin(newUserTmpl, NewUserForm{&User{}, []string{}, companies})
 }
 
 type NewVendorForm struct {
@@ -203,7 +220,7 @@ func handleCreateVendor(ctx *Context, w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		ctx.Render(newVendorTmpl, NewVendorForm{&vendor, vErrs, companies})
+		ctx.renderAdmin(newVendorTmpl, NewVendorForm{&vendor, vErrs, companies})
 		return nil
 	}
 
@@ -222,7 +239,7 @@ func handleNewVendor(ctx *Context, w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	return ctx.Render(newVendorTmpl, NewVendorForm{&Vendor{}, []string{}, companies})
+	return ctx.renderAdmin(newVendorTmpl, NewVendorForm{&Vendor{}, []string{}, companies})
 }
 
 func handleViewCompany(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -245,11 +262,11 @@ func handleViewCompany(ctx *Context, w http.ResponseWriter, r *http.Request) err
 	c.Users = users
 	c.Vendors = vendors
 
-	return ctx.Render(viewCompanyTmpl, c)
+	return ctx.renderAdmin(viewCompanyTmpl, c)
 }
 
 func handleViewVendor(ctx *Context, w http.ResponseWriter, r *http.Request) error {
-	return ctx.Render(viewVendorTmpl, nil)
+	return ctx.renderAdmin(viewVendorTmpl, nil)
 }
 
 func handleDeleteUser(ctx *Context, w http.ResponseWriter, r *http.Request) error {
@@ -271,17 +288,200 @@ func handleDeleteUser(ctx *Context, w http.ResponseWriter, r *http.Request) erro
 	return ctx.Redirect("/admin/dashboard")
 }
 
+func (ctx *Context) GetDashboardInfo() (*DashboardInfo, error) {
+	users, err := ctx.GetUserCount()
+	if err != nil {
+		return nil, err
+	}
+	companies, err := ctx.GetCompanyCount()
+	if err != nil {
+		return nil, err
+	}
+	vendors, err := ctx.GetVendorCount()
+	if err != nil {
+		return nil, err
+	}
+	bills, err := ctx.GetBillCount()
+	if err != nil {
+		return nil, err
+	}
+	di := &DashboardInfo{
+		UserCount:    users,
+		CompanyCount: companies,
+		VendorCount:  vendors,
+		BillCount:    bills,
+		Path:         ctx.r.URL.Path,
+	}
+
+	return di, nil
+}
+
+func (ctx *Context) renderAdmin(t *template.Template, content interface{}) error {
+	di, err := ctx.GetDashboardInfo()
+	if err != nil {
+		return err
+	}
+
+	return ctx.Render(t, DashboardPage{di, content})
+}
+
+func handleAdminCompanies(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	companies, err := ctx.GetAllCompanies()
+	if err != nil {
+		return err
+	}
+	return ctx.renderAdmin(viewCompanies, companies)
+}
+
+func handleAdminUsers(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	users, err := ctx.GetAllUsers()
+	if err != nil {
+		return err
+	}
+
+	err = ctx.LoadUserCompanies(users)
+	if err != nil {
+		return err
+	}
+
+	return ctx.renderAdmin(viewUsers, users)
+}
+
+func handleAdminVendors(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	vendors, err := ctx.GetAllVendors()
+	if err != nil {
+		return err
+	}
+
+	err = ctx.LoadVendorCompanies(vendors)
+	if err != nil {
+		return err
+	}
+
+	return ctx.renderAdmin(viewVendors, vendors)
+}
+
+func handleAdminBills(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	//ctx.GetAllBills().FetchVendor().FetchCompany().Slice()
+	//tmpl("viewBills").Render(results)
+
+	bills, err := ctx.GetAllBills()
+	if err != nil {
+		return err
+	}
+
+	err = ctx.LoadBillCompanies(bills)
+	if err != nil {
+		return err
+	}
+
+	ctx.LoadBillVendors(bills)
+	if err != nil {
+		return err
+	}
+
+	return ctx.renderAdmin(viewBills, bills)
+}
+
+type NewBillForm struct {
+	Bill           *Bill
+	ValidationErrs []string
+	Vendors        []*Vendor
+	UploadURL      *url.URL
+}
+
+func renderBillForm(ctx *Context, errs []string) error {
+	uploadURL, err := blobstore.UploadURL(ctx.c, "/admin/bill/create", nil)
+	if err != nil {
+		return err
+	}
+
+	vendors, err := ctx.GetAllVendors()
+	if err != nil {
+		return err
+	}
+	return ctx.renderAdmin(newBillTmpl, NewBillForm{&Bill{}, errs, vendors, uploadURL})
+}
+
+func handleNewBill(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	return renderBillForm(ctx, []string{})
+}
+
+func handleCreateBill(ctx *Context, w http.ResponseWriter, r *http.Request) error {
+	errs := []string{}
+
+	blobs, fields, err := blobstore.ParseUpload(ctx.r)
+
+	ctx.Debugf("Blobs: %v", blobs)
+
+	if err != nil {
+		return err
+	}
+
+	//vendor := getFormFieldString(fields, "vendor")
+	amt := getFormFieldInt(fields, "amount")
+	if amt <= 0 {
+		errs = append(errs, "Amount must be greater than 0")
+	}
+
+	vendorID := getFormFieldString(fields, "vendor")
+	if vendorID == "" {
+		errs = append(errs, "You must choose a vendor for the bill")
+	}
+
+	file := blobs["file"]
+	if len(file) == 0 {
+		errs = append(errs, "You must upload a bill file")
+	}
+
+	if len(errs) > 0 {
+		return renderBillForm(ctx, errs)
+	}
+
+	v, err := ctx.GetVendorByID(vendorID)
+
+	if err != nil {
+		return err
+	}
+
+	b := Bill{
+		Amt:        amt,
+		PostedOn:   time.Now(),
+		VendorKey:  v.Key,
+		CompanyKey: v.CompanyKey,
+		PostedBy:   ctx.user.String(),
+		BlobKey:    file[0].BlobKey,
+	}
+
+	key := datastore.NewIncompleteKey(ctx.c, "Bill", v.CompanyKey)
+	_, err = datastore.Put(ctx.c, key, &b)
+	if err != nil {
+		return err
+	}
+	ctx.Flash("New bill created successfully!")
+	return ctx.Redirect("/admin/bills")
+}
+
 var (
-	adminDashTmpl   = tmpl("admin/dashboard.html")
-	newCompanyTmpl  = tmpl("admin/new_company.html")
-	newUserTmpl     = tmpl("admin/new_user.html")
-	viewCompanyTmpl = tmpl("admin/view_company.html")
-	newVendorTmpl   = tmpl("admin/new_vendor.html")
-	viewVendorTmpl  = tmpl("admin/view_vendor.html")
+	adminDashTmpl   = adminTmpl("dashboard.html")
+	newCompanyTmpl  = adminTmpl("new_company.html")
+	newUserTmpl     = adminTmpl("new_user.html")
+	viewCompanyTmpl = adminTmpl("view_company.html")
+	newVendorTmpl   = adminTmpl("new_vendor.html")
+	viewVendorTmpl  = adminTmpl("view_vendor.html")
+	viewCompanies   = adminTmpl("companies.html")
+	viewUsers       = adminTmpl("users.html")
+	viewVendors     = adminTmpl("vendors.html")
+	viewBills       = adminTmpl("bills.html")
+	newBillTmpl     = adminTmpl("new_bill.html")
 )
 
 func setupAdminRoutes(router *mux.Router) {
 	router.Handle("/admin/dashboard", adminOnly(handleAdminDashboard))
+	router.Handle("/admin/companies", adminOnly(handleAdminCompanies))
+	router.Handle("/admin/users", adminOnly(handleAdminUsers))
+	router.Handle("/admin/vendors", adminOnly(handleAdminVendors))
+	router.Handle("/admin/bills", adminOnly(handleAdminBills))
 	router.Handle("/admin/user/new", adminOnly(handleNewUser))
 	router.Handle("/admin/user/create", adminOnly(handleCreateUser))
 	router.Handle("/admin/user/delete", adminOnly(handleDeleteUser))
@@ -292,5 +492,8 @@ func setupAdminRoutes(router *mux.Router) {
 	router.Handle("/admin/vendor/new", adminOnly(handleNewVendor))
 	router.Handle("/admin/vendor/create", adminOnly(handleCreateVendor))
 	router.Handle("/admin/vendor/view", adminOnly(handleViewVendor))
+
+	router.Handle("/admin/bill/new", adminOnly(handleNewBill))
+	router.Handle("/admin/bill/create", adminOnly(handleCreateBill))
 
 }

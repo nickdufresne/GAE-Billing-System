@@ -1,14 +1,9 @@
 {{define "content"}}
-  <div class="row">
-    <h2> Admin Dashboard </h2>
+   <div class="row">
+    <h1 class="page-header"> Users </h1>
     <a href="/admin/user/new" class="btn btn-default"> New User </a>
-    <a href="/admin/company/new" class="btn btn-default"> New Company </a>
-    <a href="/admin/vendor/new" class="btn btn-default"> New Vendor </a>
   </div>
-  <div class="clear-fix"></div>
-
-  
-  {{with .Users}}
+  {{with .}}
     <br/>
     <div class="row">
       <table class="table table-bordered table-striped">
@@ -33,36 +28,6 @@
               <td> {{date .LastLoginOn}} </td>
               <td> {{.CreatedBy}} </td>
               <td> <a href="/admin/user/delete?id={{.ID}}" class="btn btn-danger btn-sm"><span class="glyphicon glyphicon-remove-circle"></span> Delete </a> </td>
-            </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    <div class="clear-fix"></div>
-  {{end}}
-  {{with .Vendors}}
-    <br/>
-    <div class="row">
-      <table class="table table-bordered table-striped">
-        <thead>
-          <tr>
-            <th> Name </th>
-            <th> Company </th>
-            <th> Login </th>
-            <th> Created By </th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .}}
-            <tr>
-              <td> {{.Name}} </td>
-              {{with .Company}}
-                <td> {{.Name}} </td>
-              {{else}}
-                <td></td>
-              {{end}}
-              <td> {{date .CreatedOn}} </td>
-              <td> {{.CreatedBy}} </td>
             </tr>
           {{end}}
         </tbody>

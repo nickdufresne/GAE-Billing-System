@@ -1,0 +1,44 @@
+{{define "content"}}
+  <div class="row">
+    <h1 class="page-header"> Bills </h1>
+    <a href="/admin/bill/new" class="btn btn-default"> New Bill </a>
+  </div>
+  {{with .}}
+    <br/>
+    <div class="row">
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th> ID </th>
+            <th> Company </th>
+            <th> Vendor </th>
+            <th> Amount </th>
+            <th> Created On </th>
+            <th> Created By </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .}}
+            <tr>
+              <td> {{.ID}} </td>
+              {{with .Company}}
+                <td> {{.Name}} </td>
+              {{else}}
+                <td></td>
+              {{end}}
+              {{with .Vendor}}
+                <td> {{.Name}} </td>
+              {{else}}
+                <td></td>
+              {{end}}
+              <td> {{money .Amt}} </td>
+              <td> {{date .PostedOn}} </td>
+              <td> {{.PostedBy}} </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="clear-fix"></div>
+  {{end}}
+{{end}}

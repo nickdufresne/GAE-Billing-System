@@ -54,3 +54,21 @@ func (ctx *Context) GetCompanyByID(id string) (*Company, error) {
 
 	return c, err
 }
+
+func (ctx *Context) GetCompanyMulti(keys []*datastore.Key) ([]*Company, error) {
+	companies := make([]*Company, len(keys))
+
+	for idx, _ := range companies {
+		companies[idx] = new(Company)
+	}
+
+	err := datastore.GetMulti(ctx.c, keys, companies)
+
+	return companies, err
+
+}
+
+func (ctx *Context) GetCompanyCount() (int, error) {
+	c, err := datastore.NewQuery("Company").Count(ctx.c)
+	return c, err
+}

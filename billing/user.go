@@ -98,6 +98,25 @@ func (ctx *Context) GetUserByID(id string) (*User, error) {
 	return user, err
 }
 
+func (ctx *Context) LoadUserCompanies(users []*User) error {
+	var keys []*datastore.Key
+	for _, v := range users {
+		keys = append(keys, v.CompanyKey)
+	}
+
+	companies, err := ctx.GetCompanyMulti(keys)
+
+	if err != nil {
+		return err
+	}
+
+	for idx, v := range users {
+		v.Company = companies[idx]
+	}
+
+	return nil
+}
+
 func (ctx *Context) DeleteUser(id string) error {
 	k, err := datastore.DecodeKey(id)
 
@@ -108,4 +127,9 @@ func (ctx *Context) DeleteUser(id string) error {
 	err = datastore.Delete(ctx.c, k)
 
 	return err
+}
+
+func (ctx *Context) GetUserCount() (int, error) {
+	c, err := datastore.NewQuery("User").Count(ctx.c)
+	return c, err
 }
